@@ -182,9 +182,11 @@
     }
 
     // Events
-    connectBtn.onclick = connectWallet;
-    gbaseBtn.onclick = doGBase;
-    switchBtn.onclick = switchToBase;
+    window.addEventListener('DOMContentLoaded', () => {
+     connectBtn.onclick = connectWallet;
+     gbaseBtn.onclick = doGBase;
+     switchBtn.onclick = switchToBase;
+    });
 
     // Auto-update UI every 20s (e.g. if tx confirmed externally)
     setInterval(async () => {
@@ -193,3 +195,4 @@
   </script>
 </body>
 </html>
+
