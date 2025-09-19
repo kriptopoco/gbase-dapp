@@ -45,20 +45,14 @@
     const contractAddress = "0x1b8f744E7276cE71D6294240432C92561F8480af";
     // -------------------------
 
-    // Minimal ABI (kontrattaki public fonksiyonlar)
     const abi = [
       "function gBase() external",
       "function lastGBase(address) view returns (uint256)"
     ];
 
     let provider, signer, contract, userAddress;
-    const connectBtn = document.getElementById('connectBtn');
-    const gbaseBtn = document.getElementById('gbaseBtn');
-    const switchBtn = document.getElementById('switchBtn');
-    const addrEl = document.getElementById('addr');
-    const netEl = document.getElementById('net');
-    const lastEl = document.getElementById('lastG');
-    const statusEl = document.getElementById('status');
+    let connectBtn, gbaseBtn, switchBtn;
+    let addrEl, netEl, lastEl, statusEl;
 
     function logStatus(msg) {
       statusEl.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -85,7 +79,6 @@
       netEl.textContent = `Network: ${network.name || network.chainId} (chainId: ${network.chainId})`;
       await refreshLastG();
       await updateButtons();
-      // listen for accounts/network changes
       window.ethereum.on("accountsChanged", () => location.reload());
       window.ethereum.on("chainChanged", () => location.reload());
       logStatus("Connected");
@@ -152,13 +145,11 @@
       }
     }
 
-    // Try to switch to Base mainnet (chainId 8453 -> hex 0x2105)
     async function switchToBase() {
       if (!window.ethereum) { alert("Metamask yok"); return; }
       try {
         await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x2105" }] });
       } catch (switchError) {
-        // 4902: chain not added
         if (switchError.code === 4902 || switchError.message?.includes("Unrecognized chain")) {
           try {
             await window.ethereum.request({
@@ -181,24 +172,26 @@
       }
     }
 
-    // Events
+    // -------------------------
+    // DOMContentLoaded ile tüm elementleri bağla
     window.addEventListener('DOMContentLoaded', () => {
-     const connectBtn = document.getElementById('connectBtn');
-     const gbaseBtn = document.getElementById('gbaseBtn');
-     const switchBtn = document.getElementById('switchBtn');
+      connectBtn = document.getElementById('connectBtn');
+      gbaseBtn = document.getElementById('gbaseBtn');
+      switchBtn = document.getElementById('switchBtn');
+      addrEl = document.getElementById('addr');
+      netEl = document.getElementById('net');
+      lastEl = document.getElementById('lastG');
+      statusEl = document.getElementById('status');
 
-     connectBtn.onclick = connectWallet;
-     gbaseBtn.onclick = doGBase;
-     switchBtn.onclick = switchToBase;
-   });
+      connectBtn.onclick = connectWallet;
+      gbaseBtn.onclick = doGBase;
+      switchBtn.onclick = switchToBase;
+    });
 
-
-    // Auto-update UI every 20s (e.g. if tx confirmed externally)
     setInterval(async () => {
       if (contract && userAddress) { await refreshLastG(); await updateButtons(); }
     }, 20000);
+
   </script>
 </body>
 </html>
-
-
