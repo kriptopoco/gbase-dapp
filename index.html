@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>gBase dApp</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+  <style>
+    body { font-family: Inter, system-ui, Arial; display:flex; min-height:100vh; align-items:center; justify-content:center; background:#f7f7fb; margin:0; }
+    .card { background:#fff; padding:20px; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,50,0.06); width:360px; }
+    button { padding:10px 14px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
+    .primary { background:#111827; color:#fff; }
+    .muted { background:#efefef; color:#333; }
+    .row { display:flex; gap:8px; margin-top:12px; }
+    .small { font-size:13px; color:#555; margin-top:8px; }
+    pre { background:#f2f4f7; padding:8px; border-radius:8px; overflow:auto; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h3>gBase dApp</h3>
+    <div id="addr" class="small">Wallet: —</div>
+    <div id="net" class="small">Network: —</div>
+
+    <div class="row">
+      <button id="connectBtn" class="primary">Connect Wallet</button>
+      <button id="switchBtn" class="muted">Switch to Base</button>
+    </div>
+
+    <div class="small" style="margin-top:14px;">
+      Last gBase: <span id="lastG">—</span>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <button id="gbaseBtn" class="primary" style="flex:1">gBase</button>
+    </div>
+
+    <div class="small" style="margin-top:12px;">Status:</div>
+    <pre id="status">Idle</pre>
+  </div>
+
+  <script>
+    // -------------------------
+    // **DEĞİŞTİR**: buraya deployed kontrat adresini yapıştır
+    const contractAddress = "0x1b8f744E7276cE71D6294240432C92561F8480af";
+    // -------------------------
+
+    // Minimal ABI (kontrattaki public fonksiyonlar)
+    const abi = [
+      "function gBase() external",
+      "function lastGBase(address) view returns (uint256)"
+    ];
+
+    let provider, signer, contract, userAddress;
+    const connectBtn = document.getElementById('connectBtn');
+    const gbaseBtn = document.getElementById('gbaseBtn');
+    const switchBtn = document.getElementById('switchBtn');
+    const addrEl = document.getElementById('addr');
+    const netEl = document.getElementById('net');
+    const lastEl = document.getElementById('lastG');
+    const statusEl = document.getElementById('status');
+
+    function logStatus(msg) {
+      statusEl.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    }
+
+    function formatTs(ts) {
+      if (!ts || ts === 0) return "Never";
+      try {
+        return new Date(ts * 1000).toLocaleString();
+      } catch (e) {
+        return String(ts);
+      }
+    }
+
+    async function connectWallet() {
+      if (!window.ethereum) { alert("Metamask yok — yükle ve tekrar dene"); return; }
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      addrEl.textContent = "Wallet: " + userAddress;
+      contract = new ethers.Contract(contractAddress, abi, signer);
+      const network = await provider.getNetwork();
+      netEl.textContent = `Network: ${network.name || network.chainId} (chainId: ${network.chainId})`;
+      await refreshLastG();
+      await updateButtons();
+      // listen for accounts/network changes
+      window.ethereum.on("accountsChanged", () => location.reload());
+      window.ethereum.on("chainChanged", () => location.reload());
+      logStatus("Connected");
+    }
+
+    async function refreshLastG() {
+      try {
+        if (!contract || !userAddress) { lastEl.textContent = "—"; return; }
+        const bn = await contract.lastGBase(userAddress);
+        const ts = bn.toNumber ? bn.toNumber() : Number(bn);
+        lastEl.textContent = formatTs(ts);
+      } catch (err) {
+        console.error(err);
+        lastEl.textContent = "Error";
+      }
+    }
+
+    function canGBase(lastTs) {
+      if (!lastTs || lastTs === 0) return true;
+      const now = Math.floor(Date.now()/1000);
+      return (now - lastTs) > 86400; // 24*60*60
+    }
+
+    async function updateButtons() {
+      if (!contract || !userAddress) {
+        gbaseBtn.disabled = true;
+        connectBtn.disabled = false;
+        return;
+      }
+      connectBtn.disabled = true;
+      try {
+        const bn = await contract.lastGBase(userAddress);
+        const lastTs = bn.toNumber ? bn.toNumber() : Number(bn);
+        if (canGBase(lastTs)) {
+          gbaseBtn.disabled = false;
+          gbaseBtn.textContent = "gBase";
+        } else {
+          gbaseBtn.disabled = true;
+          gbaseBtn.textContent = "Already gBase today";
+        }
+      } catch (e) {
+        console.error(e);
+        gbaseBtn.disabled = false;
+        gbaseBtn.textContent = "gBase";
+      }
+    }
+
+    async function doGBase() {
+      if (!contract) { alert("Connect wallet first"); return; }
+      try {
+        logStatus("Sending transaction...");
+        const tx = await contract.gBase();
+        logStatus("Tx sent: " + tx.hash + " — waiting confirmation...");
+        await tx.wait();
+        logStatus("Tx confirmed: " + tx.hash);
+        await refreshLastG();
+        await updateButtons();
+        alert("gBase başarıyla gönderildi ✅");
+      } catch (err) {
+        console.error(err);
+        const msg = (err && err.message) ? err.message : String(err);
+        logStatus("Error: " + msg);
+        alert("Error: " + msg);
+      }
+    }
+
+    // Try to switch to Base mainnet (chainId 8453 -> hex 0x2105)
+    async function switchToBase() {
+      if (!window.ethereum) { alert("Metamask yok"); return; }
+      try {
+        await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x2105" }] });
+      } catch (switchError) {
+        // 4902: chain not added
+        if (switchError.code === 4902 || switchError.message?.includes("Unrecognized chain")) {
+          try {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: "0x2105",
+                chainName: "Base Mainnet",
+                rpcUrls: ["https://mainnet.base.org"],
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+              }]
+            });
+          } catch (addErr) {
+            console.error(addErr);
+            alert("Ağ eklenemedi: " + (addErr.message || addErr));
+          }
+        } else {
+          console.error(switchError);
+          alert("Ağ değiştirme hatası: " + (switchError.message || switchError));
+        }
+      }
+    }
+
+    // Events
+    connectBtn.onclick = connectWallet;
+    gbaseBtn.onclick = doGBase;
+    switchBtn.onclick = switchToBase;
+
+    // Auto-update UI every 20s (e.g. if tx confirmed externally)
+    setInterval(async () => {
+      if (contract && userAddress) { await refreshLastG(); await updateButtons(); }
+    }, 20000);
+  </script>
+</body>
+</html>
